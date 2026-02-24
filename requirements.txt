@@ -1,4 +1,4 @@
 groq
 supabase
 python-dotenv
-requests
+urllib3
