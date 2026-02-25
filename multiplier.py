@@ -33,7 +33,7 @@ BATCH_SIZE = 500
 
 # Maximum combinations to generate per pattern (to avoid memory explosion)
 # Set to None for unlimited, but be careful with huge seed lists
-MAX_COMBOS_PER_PATTERN = 5000  # 50k per pattern is plenty
+MAX_COMBOS_PER_PATTERN = 3000  # 3000 keywords per pattern = High Quality Sniper approach
 
 # Default seeds if tables are empty (ensures system never crashes)
 DEFAULT_BRANDS = ["Siemens", "Fanuc", "Allen Bradley", "ABB", "Mitsubishi", "Yaskawa", "Omron", "Schneider Electric"]
