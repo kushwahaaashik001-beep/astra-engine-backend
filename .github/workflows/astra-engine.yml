@@ -1,0 +1,44 @@
+name: Astra Infinity Engine Cycle
+
+on:
+  schedule:
+    # Ye har 6 ghante mein auto-pilot chalega
+    - cron: '0 */6 * * *' 
+  workflow_dispatch:      
+    # Isse tumhe GitHub pe ek "Run Workflow" ka button mil jayega manual chalane ke liye
+
+jobs:
+  astra-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python Environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Required Libraries
+        run: |
+          pip install requests supabase python-dotenv groq
+
+      - name: Phase 1: Scout (Hunting New Data)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python scout.py
+
+      - name: Phase 2: Multiplier (Generating Gold Keywords)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python multiplier.py
+
+      - name: Phase 3: Synthesizer (Writing Rank-0 Articles)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python synthesizer.py
