@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Astra Synthesizer v8.2 – Final Production Version
+Astra Synthesizer v8.3 – Final Production with Universal Slug
 Author: Astra Core Engineering Team
 Purpose: Fully autonomous, EEAT‑optimized, Google Rank‑0 ready technical content generator.
          Uses 70B for deep sections and 8B for light tasks to stay within free quotas.
-         Includes image placeholder handling and safe internal linking.
+         Includes image placeholder handling, safe internal linking, and universal slug logic
+         that matches Linker & Pinger for perfect URL consistency.
 """
 
 import os
@@ -19,7 +20,7 @@ import asyncio
 import aiohttp
 from typing import Optional, Dict, List, Tuple, Any, Union
 from datetime import datetime, timedelta
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -38,6 +39,18 @@ from bs4 import BeautifulSoup
 import spacy
 
 load_dotenv()
+
+# ============================ UNIVERSAL SLUG GENERATOR ============================
+def generate_slug(keyword: str) -> str:
+    """
+    Universal slug generator used across all Astra modules (Synthesizer, Linker, Pinger).
+    Removes special characters, collapses spaces/hyphens, and lowercases.
+    """
+    # Remove any non‑alphanumeric characters except spaces and hyphens
+    cleaned = re.sub(r'[^a-zA-Z0-9\s-]', '', keyword).strip().lower()
+    # Replace spaces and multiple hyphens with a single hyphen
+    slug = re.sub(r'[\s-]+', '-', cleaned)
+    return slug
 
 # ============================ CONFIGURATION ============================
 class Config:
@@ -87,6 +100,8 @@ class Config:
     # Groq model selection
     GROQ_MODEL_HEAVY = os.getenv("GROQ_MODEL_HEAVY", "llama-3.3-70b-versatile")
     GROQ_MODEL_LIGHT = os.getenv("GROQ_MODEL_LIGHT", "llama-3.1-8b-instant")
+    # Site domain for absolute URLs
+    SITE_DOMAIN = os.getenv("SITE_DOMAIN", "https://your-astra-site.com")
 
 Config.CACHE_DIR.mkdir(exist_ok=True)
 
@@ -528,7 +543,7 @@ class EntityWeaver:
 
 entity_weaver = EntityWeaver()
 
-# ============================ SEMANTIC INTERNAL MESH ============================
+# ============================ SEMANTIC INTERNAL MESH (with universal slug) ============================
 class InternalMeshBuilder:
     async def fetch_related_articles(self, keyword: str, current_id: str, limit: int = 3) -> List[Dict]:
         if not supabase_client.client or not Config.ENABLE_INTERNAL_MESH:
@@ -586,7 +601,7 @@ class InternalMeshBuilder:
         if not Config.ENABLE_INTERNAL_MESH:
             return html
         related = await self.fetch_related_articles(keyword, current_id)
-        # FIX: Only add section if we have at least 3 related articles
+        # Only add section if we have at least 3 related articles
         if len(related) < 3:
             logger.debug(f"Not enough related articles for {keyword} (found {len(related)}), skipping internal links.")
             return html
@@ -597,7 +612,9 @@ class InternalMeshBuilder:
         ul = soup.new_tag('ul')
         for art in related:
             li = soup.new_tag('li')
-            a = soup.new_tag('a', href=f"/troubleshoot/{quote_plus(art['keyword'])}")
+            slug = generate_slug(art['keyword'])
+            url = urljoin(Config.SITE_DOMAIN, f"/troubleshoot/{slug}")
+            a = soup.new_tag('a', href=url)
             a.string = art['keyword']
             li.append(a)
             ul.append(li)
@@ -728,11 +745,9 @@ class VisualAnchorInjector:
         soup = BeautifulSoup(html, 'html.parser')
 
         # First, replace any textual [IMAGE: ...] markers with actual figure tags
-        # This handles any leftover from AI generation
         body = soup.find('body')
         if body:
             text = str(body)
-            # Simple pattern: [IMAGE: some description]
             pattern = r'\[IMAGE:\s*([^\]]+)\]'
             matches = re.findall(pattern, text)
             for desc in matches:
@@ -749,7 +764,7 @@ class VisualAnchorInjector:
                 step_count += 1
                 fig = soup.new_tag('figure', **{'class': 'astra-visual-anchor'})
                 img = soup.new_tag('img',
-                                   src=f"/images/placeholders/{keyword.replace(' ', '-')}-step{step_count}.jpg",
+                                   src=f"/images/placeholders/{generate_slug(keyword)}-step{step_count}.jpg",
                                    alt=f"Diagram for troubleshooting step {step_count}",
                                    loading='lazy')
                 fig.append(img)
@@ -761,21 +776,22 @@ class VisualAnchorInjector:
 
 visual_injector = VisualAnchorInjector()
 
-# ============================ BREADCRUMB SCHEMA GENERATOR ============================
+# ============================ BREADCRUMB SCHEMA GENERATOR (with universal slug) ============================
 class BreadcrumbSchemaGenerator:
     def generate(self, keyword: str) -> str:
         if not Config.ENABLE_BREADCRUMB_SCHEMA:
             return ""
         brand, model, _ = self._extract_brand_model(keyword)
         items = [
-            {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://astra.com"},
-            {"@type": "ListItem", "position": 2, "name": "Troubleshooting", "item": "https://astra.com/troubleshoot"}
+            {"@type": "ListItem", "position": 1, "name": "Home", "item": Config.SITE_DOMAIN},
+            {"@type": "ListItem", "position": 2, "name": "Troubleshooting", "item": f"{Config.SITE_DOMAIN}/troubleshoot"}
         ]
         if brand:
-            items.append({"@type": "ListItem", "position": 3, "name": brand, "item": f"https://astra.com/brands/{quote_plus(brand)}"})
+            items.append({"@type": "ListItem", "position": 3, "name": brand, "item": f"{Config.SITE_DOMAIN}/brands/{quote_plus(brand)}"})
         if model:
-            items.append({"@type": "ListItem", "position": 4, "name": model, "item": f"https://astra.com/models/{quote_plus(model)}"})
-        items.append({"@type": "ListItem", "position": len(items)+1, "name": keyword, "item": f"https://astra.com/troubleshoot/{quote_plus(keyword)}"})
+            items.append({"@type": "ListItem", "position": 4, "name": model, "item": f"{Config.SITE_DOMAIN}/models/{quote_plus(model)}"})
+        slug = generate_slug(keyword)
+        items.append({"@type": "ListItem", "position": len(items)+1, "name": keyword, "item": f"{Config.SITE_DOMAIN}/troubleshoot/{slug}"})
         schema = {
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
@@ -1079,10 +1095,10 @@ class ContentAssembler:
         article_body = entity_weaver.weave(article_body, entities)
         article_body = jargon_injector.inject(article_body, self._extract_brand())
         article_body = unit_converter.convert(article_body)
-        article_body = visual_injector.inject(article_body, self.keyword)   # <-- includes image placeholder fix
+        article_body = visual_injector.inject(article_body, self.keyword)   # includes image placeholder fix
         article_body = safety_injector.inject(article_body)
         article_body = await pdf_weaver.weave(article_body, self.keyword)
-        article_body = await internal_mesh_builder.inject_links(article_body, self.keyword, current_id)  # <-- safe linking
+        article_body = await internal_mesh_builder.inject_links(article_body, self.keyword, current_id)  # safe linking
         article_body = MonetizationEngine.inject_affiliate_links(article_body, self.keyword)
         article_body = MonetizationEngine.add_subscription_prompt(article_body)
         article_body = image_alt_optimizer.optimize(article_body, self.keyword)
